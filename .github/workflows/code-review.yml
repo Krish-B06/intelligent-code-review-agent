@@ -4,6 +4,13 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Pull request number to review"
+        required: true
+        type: string
+
 permissions:
   contents: read
   pull-requests: read
@@ -19,10 +26,38 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Resolve pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_PR: ${{ inputs.pr_number }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            PR_NUMBER="${{ github.event.pull_request.number }}"
+          else
+            PR_NUMBER="$INPUT_PR"
+          fi
+
+          if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "Invalid pull request number: $PR_NUMBER"
+            exit 1
+          fi
+
+          BASE_SHA=$(gh pr view "$PR_NUMBER" --json baseRefOid --jq '.baseRefOid')
+          HEAD_SHA=$(gh pr view "$PR_NUMBER" --json headRefOid --jq '.headRefOid')
+
+          echo "PR_NUMBER=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "BASE_SHA=$BASE_SHA" >> "$GITHUB_OUTPUT"
+          echo "HEAD_SHA=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
+          echo "PR: $PR_NUMBER"
+          echo "BASE: $BASE_SHA"
+          echo "HEAD: $HEAD_SHA"
+
       - name: Collect changed files
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ steps.pr.outputs.BASE_SHA }}
+          HEAD_SHA: ${{ steps.pr.outputs.HEAD_SHA }}
         run: |
           git diff --name-only "$BASE_SHA" "$HEAD_SHA" > changed-files.txt
 
@@ -31,8 +66,8 @@ jobs:
 
       - name: Generate review diff
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ steps.pr.outputs.BASE_SHA }}
+          HEAD_SHA: ${{ steps.pr.outputs.HEAD_SHA }}
         run: |
           git diff --no-ext-diff --unified=80 \
             "$BASE_SHA" "$HEAD_SHA" > review.diff
