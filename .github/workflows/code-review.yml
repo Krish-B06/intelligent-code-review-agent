@@ -26,23 +26,75 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Resolve the PR number for both trigger types.
+      - name: Resolve pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_PR_NUMBER: ${{ inputs.pr_number }}
+          EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ -n "$EVENT_PR_NUMBER" ]; then
+            PR_NUMBER="$EVENT_PR_NUMBER"
+          elif [ -n "$INPUT_PR_NUMBER" ]; then
+            PR_NUMBER="$INPUT_PR_NUMBER"
+          else
+            echo "Unable to determine pull request number."
+            exit 1
+          fi
+
+          echo "PR number: $PR_NUMBER"
+
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+
+      # Resolve the exact base/head commits.
+      - name: Resolve pull request commits
+        id: commits
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
+        run: |
+          BASE_SHA=$(gh pr view "$PR_NUMBER" \
+            --json baseRefOid \
+            --jq '.baseRefOid')
+
+          HEAD_SHA=$(gh pr view "$PR_NUMBER" \
+            --json headRefOid \
+            --jq '.headRefOid')
+
+          if [ -z "$BASE_SHA" ] || [ -z "$HEAD_SHA" ]; then
+            echo "Unable to resolve PR commits."
+            exit 1
+          fi
+
+          echo "Base SHA: $BASE_SHA"
+          echo "Head SHA: $HEAD_SHA"
+
+          echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+
       - name: Collect changed files
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ steps.commits.outputs.base_sha }}
+          HEAD_SHA: ${{ steps.commits.outputs.head_sha }}
         run: |
-          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > changed-files.txt
+          git diff --name-only \
+            "$BASE_SHA" "$HEAD_SHA" \
+            > changed-files.txt
 
           echo "Changed files:"
           cat changed-files.txt
 
       - name: Generate review diff
         env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_SHA: ${{ steps.commits.outputs.base_sha }}
+          HEAD_SHA: ${{ steps.commits.outputs.head_sha }}
         run: |
-          git diff --no-ext-diff --unified=80 \
-            "$BASE_SHA" "$HEAD_SHA" > review.diff
+          git diff \
+            --no-ext-diff \
+            --unified=80 \
+            "$BASE_SHA" "$HEAD_SHA" \
+            > review.diff
 
           echo "Diff size:"
           wc -c review.diff
@@ -55,6 +107,7 @@ jobs:
 
             echo
             echo "=== RELATED TEST FILES ==="
+
             while IFS= read -r file; do
               [ -f "$file" ] || continue
 
@@ -72,45 +125,86 @@ jobs:
 
             echo
             echo "=== REQUIREMENTS / ACCEPTANCE DOCUMENTS ==="
+
             find . \
               -type f \
-              \( -path './requirements/*' \
-                 -o -path './docs/*' \
-                 -o -path './specs/*' \
-                 -o -iname '*requirement*' \
-                 -o -iname '*acceptance*' \
-                 -o -iname '*user-story*' \
-                 -o -iname '*user_story*' \) \
+              \( \
+                -path './requirements/*' \
+                -o -path './docs/*' \
+                -o -path './specs/*' \
+                -o -iname '*requirement*' \
+                -o -iname '*acceptance*' \
+                -o -iname '*user-story*' \
+                -o -iname '*user_story*' \
+              \) \
               -not -path './.git/*' \
               -not -path './node_modules/*' \
-              | sort -u | head -50
+              | sort -u \
+              | head -50
 
             echo
             echo "=== ARCHITECTURE / DESIGN DOCUMENTS ==="
+
             find . \
               -type f \
-              \( -path './architecture/*' \
-                 -o -path './design/*' \
-                 -o -iname '*architecture*' \
-                 -o -iname '*design*' \
-                 -o -iname '*hld*' \
-                 -o -iname '*lld*' \) \
+              \( \
+                -path './architecture/*' \
+                -o -path './design/*' \
+                -o -iname '*architecture*' \
+                -o -iname '*design*' \
+                -o -iname '*hld*' \
+                -o -iname '*lld*' \
+              \) \
               -not -path './.git/*' \
               -not -path './node_modules/*' \
-              | sort -u | head -50
+              | sort -u \
+              | head -50
 
             echo
             echo "=== STATIC ANALYSIS FILES ==="
+
             find . \
               -type f \
-              \( -name '*.sarif' \
-                 -o -name '*static-analysis*' \
-                 -o -name '*static_analysis*' \) \
+              \( \
+                -name '*.sarif' \
+                -o -name '*static-analysis*' \
+                -o -name '*static_analysis*' \
+              \) \
               -not -path './.git/*' \
-              | sort -u | head -50
+              | sort -u \
+              | head -50
+
           } > review-manifest.txt
 
           cat review-manifest.txt
+
+      - name: Validate review inputs
+        run: |
+          set -e
+
+          test -f .github/agents/code-review.agent.md
+          test -f .github/instructions/code-review.instructions.md
+          test -f .github/prompts/code-review.prompt.md
+
+          test -f changed-files.txt
+          test -f review.diff
+          test -f review-manifest.txt
+
+          echo "Review definitions:"
+          wc -c \
+            .github/agents/code-review.agent.md \
+            .github/instructions/code-review.instructions.md \
+            .github/prompts/code-review.prompt.md
+
+          echo
+          echo "Review inputs:"
+          wc -c \
+            changed-files.txt \
+            review.diff \
+            review-manifest.txt
+
+          echo
+          echo "Review input validation passed."
 
       - name: Collect repository review definitions
         run: |
@@ -125,50 +219,42 @@ jobs:
           cp .github/prompts/code-review.prompt.md \
             review-context/code-review.prompt.md
 
-          cp changed-files.txt review-context/changed-files.txt
-          cp review.diff review-context/review.diff
-          cp review-manifest.txt review-context/review-manifest.txt
+          cp changed-files.txt \
+            review-context/changed-files.txt
 
-      - name: Install GitHub Copilot CLI
+          cp review.diff \
+            review-context/review.diff
+
+          cp review-manifest.txt \
+            review-context/review-manifest.txt
+
+      - name: Build review input summary
         run: |
-          npm install -g @github/copilot
+          {
+            echo "CUSTOM CODE REVIEW INPUT"
+            echo
+            echo "PR: #${{ steps.pr.outputs.pr_number }}"
+            echo "BASE: ${{ steps.commits.outputs.base_sha }}"
+            echo "HEAD: ${{ steps.commits.outputs.head_sha }}"
+            echo
+            echo "Review agent:"
+            echo ".github/agents/code-review.agent.md"
+            echo
+            echo "Instructions:"
+            echo ".github/instructions/code-review.instructions.md"
+            echo
+            echo "Prompt:"
+            echo ".github/prompts/code-review.prompt.md"
+            echo
+            echo "Changed files:"
+            cat changed-files.txt
+            echo
+            echo "Review manifest:"
+            cat review-manifest.txt
+          } > review-context/review-input-summary.txt
 
-      - name: Run custom code review agent
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          copilot \
-            --agent code-review \
-            --model gpt-5.4 \
-            --prompt "$(cat .github/prompts/code-review.prompt.md)
-
-          Additional review context:
-
-          === CHANGED FILES ===
-          $(cat changed-files.txt)
-
-          === REVIEW MANIFEST ===
-          $(cat review-manifest.txt)
-
-          === REVIEW DIFF ===
-          $(cat review.diff)
-
-          Review only.
-          Do not modify files.
-          Do not create commits.
-          Do not push changes." \
-            --allow-all-tools \
-            --output-format text \
-            --silent \
-            > review-result.txt
-
-      - name: Display review result
-        run: |
-          echo "===== CODE REVIEW ====="
-          cat review-result.txt
-
-      - name: Upload review result
+      - name: Upload prepared review context
         uses: actions/upload-artifact@v4
         with:
-          name: code-review-result
-          path: review-result.txt
+          name: code-review-context
+          path: review-context/

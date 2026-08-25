@@ -1,9 +1,6 @@
 ---
 name: Custom Code Review Agent
 description: Repository-contained code review agent for reviewing developer changes.
-tools:
-  - read
-  - search
 ---
 
 # Custom Code Review Agent
