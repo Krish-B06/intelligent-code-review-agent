@@ -1,0 +1,64 @@
+name: Custom Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  prepare-review:
+    name: Prepare Code Review
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Collect changed files
+        id: changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > changed-files.txt
+
+          echo "Changed files:"
+          cat changed-files.txt
+
+      - name: Generate review diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          git diff --no-ext-diff --unified=80 \
+            "$BASE_SHA" "$HEAD_SHA" > review.diff
+
+          echo "Diff size:"
+          wc -c review.diff
+
+      - name: Collect repository review context
+        run: |
+          mkdir -p review-context
+
+          cp .github/agents/code-review.agent.md \
+            review-context/code-review.agent.md
+
+          cp .github/instructions/code-review.instructions.md \
+            review-context/code-review.instructions.md
+
+          cp .github/prompts/code-review.prompt.md \
+            review-context/code-review.prompt.md
+
+          cp changed-files.txt review-context/changed-files.txt
+          cp review.diff review-context/review.diff
+
+      - name: Upload prepared review context
+        uses: actions/upload-artifact@v4
+        with:
+          name: code-review-context
+          path: review-context/
