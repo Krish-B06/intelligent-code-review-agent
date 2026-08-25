@@ -1,0 +1,12 @@
+Review the changes in review.diff using the repository's custom code review agent.
+
+Use:
+- .github/agents/code-review.agent.md
+- .github/instructions/code-review.instructions.md
+- .github/prompts/code-review.prompt.md
+- review.diff
+- review-manifest.txt
+
+Review only. Do not modify files, create commits, or push changes.
+
+Return the required review output defined by the repository review instructions.

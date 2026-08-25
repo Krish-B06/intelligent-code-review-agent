@@ -1,0 +1,102 @@
+diff --git a/.github/workflows/code-review.yml b/.github/workflows/code-review.yml
+index 68eb0c1..ccb8a75 100644
+--- a/.github/workflows/code-review.yml
++++ b/.github/workflows/code-review.yml
+@@ -20,7 +20,6 @@ jobs:
+           fetch-depth: 0
+ 
+       - name: Collect changed files
+-        id: changes
+         env:
+           BASE_SHA: ${{ github.event.pull_request.base.sha }}
+           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+@@ -41,7 +40,72 @@ jobs:
+           echo "Diff size:"
+           wc -c review.diff
+ 
+-      - name: Collect repository review context
++      - name: Discover review context
++        run: |
++          {
++            echo "=== CHANGED FILES ==="
++            cat changed-files.txt
++
++            echo
++            echo "=== RELATED TEST FILES ==="
++            while IFS= read -r file; do
++              [ -f "$file" ] || continue
++
++              base="${file%.*}"
++              ext="${file##*.}"
++
++              for candidate in \
++                "${base}.test.${ext}" \
++                "${base}.spec.${ext}" \
++                "${base}_test.${ext}" \
++                "${base}_spec.${ext}"; do
++                [ -f "$candidate" ] && echo "$candidate"
++              done
++            done < changed-files.txt
++
++            echo
++            echo "=== REQUIREMENTS / ACCEPTANCE DOCUMENTS ==="
++            find . \
++              -type f \
++              \( -path './requirements/*' \
++                 -o -path './docs/*' \
++                 -o -path './specs/*' \
++                 -o -iname '*requirement*' \
++                 -o -iname '*acceptance*' \
++                 -o -iname '*user-story*' \
++                 -o -iname '*user_story*' \) \
++              -not -path './.git/*' \
++              -not -path './node_modules/*' \
++              | sort -u | head -50
++
++            echo
++            echo "=== ARCHITECTURE / DESIGN DOCUMENTS ==="
++            find . \
++              -type f \
++              \( -path './architecture/*' \
++                 -o -path './design/*' \
++                 -o -iname '*architecture*' \
++                 -o -iname '*design*' \
++                 -o -iname '*hld*' \
++                 -o -iname '*lld*' \) \
++              -not -path './.git/*' \
++              -not -path './node_modules/*' \
++              | sort -u | head -50
++
++            echo
++            echo "=== STATIC ANALYSIS FILES ==="
++            find . \
++              -type f \
++              \( -name '*.sarif' \
++                 -o -name '*static-analysis*' \
++                 -o -name '*static_analysis*' \) \
++              -not -path './.git/*' \
++              | sort -u | head -50
++          } > review-manifest.txt
++
++          cat review-manifest.txt
++
++      - name: Collect repository review definitions
+         run: |
+           mkdir -p review-context
+ 
+@@ -56,6 +120,7 @@ jobs:
+ 
+           cp changed-files.txt review-context/changed-files.txt
+           cp review.diff review-context/review.diff
++          cp review-manifest.txt review-context/review-manifest.txt
+ 
+       - name: Upload prepared review context
+         uses: actions/upload-artifact@v4
+diff --git a/README.md b/README.md
+index 9bfe63a..83b11df 100644
+--- a/README.md
++++ b/README.md
+@@ -1 +1 @@
+-# intelligent-code-review-agent
+\ No newline at end of file
++# intelligent-code-review-agent
