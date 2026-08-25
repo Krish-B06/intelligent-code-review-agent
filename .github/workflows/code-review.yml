@@ -26,38 +26,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Resolve pull request
-        id: pr
-        env:
-          GH_TOKEN: ${{ github.token }}
-          INPUT_PR: ${{ inputs.pr_number }}
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            PR_NUMBER="${{ github.event.pull_request.number }}"
-          else
-            PR_NUMBER="$INPUT_PR"
-          fi
-
-          if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
-            echo "Invalid pull request number: $PR_NUMBER"
-            exit 1
-          fi
-
-          BASE_SHA=$(gh pr view "$PR_NUMBER" --json baseRefOid --jq '.baseRefOid')
-          HEAD_SHA=$(gh pr view "$PR_NUMBER" --json headRefOid --jq '.headRefOid')
-
-          echo "PR_NUMBER=$PR_NUMBER" >> "$GITHUB_OUTPUT"
-          echo "BASE_SHA=$BASE_SHA" >> "$GITHUB_OUTPUT"
-          echo "HEAD_SHA=$HEAD_SHA" >> "$GITHUB_OUTPUT"
-
-          echo "PR: $PR_NUMBER"
-          echo "BASE: $BASE_SHA"
-          echo "HEAD: $HEAD_SHA"
-
       - name: Collect changed files
         env:
-          BASE_SHA: ${{ steps.pr.outputs.BASE_SHA }}
-          HEAD_SHA: ${{ steps.pr.outputs.HEAD_SHA }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           git diff --name-only "$BASE_SHA" "$HEAD_SHA" > changed-files.txt
 
@@ -66,8 +38,8 @@ jobs:
 
       - name: Generate review diff
         env:
-          BASE_SHA: ${{ steps.pr.outputs.BASE_SHA }}
-          HEAD_SHA: ${{ steps.pr.outputs.HEAD_SHA }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           git diff --no-ext-diff --unified=80 \
             "$BASE_SHA" "$HEAD_SHA" > review.diff
@@ -157,8 +129,46 @@ jobs:
           cp review.diff review-context/review.diff
           cp review-manifest.txt review-context/review-manifest.txt
 
-      - name: Upload prepared review context
+      - name: Install GitHub Copilot CLI
+        run: |
+          npm install -g @github/copilot
+
+      - name: Run custom code review agent
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          copilot \
+            --agent code-review \
+            --model gpt-5.4 \
+            --prompt "$(cat .github/prompts/code-review.prompt.md)
+
+          Additional review context:
+
+          === CHANGED FILES ===
+          $(cat changed-files.txt)
+
+          === REVIEW MANIFEST ===
+          $(cat review-manifest.txt)
+
+          === REVIEW DIFF ===
+          $(cat review.diff)
+
+          Review only.
+          Do not modify files.
+          Do not create commits.
+          Do not push changes." \
+            --allow-all-tools \
+            --output-format text \
+            --silent \
+            > review-result.txt
+
+      - name: Display review result
+        run: |
+          echo "===== CODE REVIEW ====="
+          cat review-result.txt
+
+      - name: Upload review result
         uses: actions/upload-artifact@v4
         with:
-          name: code-review-context
-          path: review-context/
+          name: code-review-result
+          path: review-result.txt
