@@ -406,7 +406,7 @@ jobs:
 
           copilot \
             --agent=code-review \
-            --model=gpt-5-mini \
+            --model=gpt-4.1 \
             -p "$(cat review-context/review-execution-prompt.txt)" \
             --output-format text \
             --silent \
