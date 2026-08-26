@@ -6,11 +6,11 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: write
 
 jobs:
-  prepare-review:
-    name: Prepare Code Review
+  code-review:
+    name: Custom Code Review
     runs-on: ubuntu-latest
 
     steps:
@@ -19,18 +19,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Collect changed files
-        id: changes
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > changed-files.txt
-
-          echo "Changed files:"
-          cat changed-files.txt
-
-      - name: Generate review diff
+      - name: Generate PR diff
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -38,27 +27,56 @@ jobs:
           git diff --no-ext-diff --unified=80 \
             "$BASE_SHA" "$HEAD_SHA" > review.diff
 
-          echo "Diff size:"
-          wc -c review.diff
-
-      - name: Collect repository review context
+      - name: Prepare review prompt
         run: |
-          mkdir -p review-context
+          cat > review-prompt.txt <<'EOF'
+          You are the repository's automated code review agent.
 
-          cp .github/agents/code-review.agent.md \
-            review-context/code-review.agent.md
+          Read and follow:
 
-          cp .github/instructions/code-review.instructions.md \
-            review-context/code-review.instructions.md
+          .github/agents/code-review.agent.md
+          .github/instructions/code-review.instructions.md
+          .github/prompts/code-review.prompt.md
 
-          cp .github/prompts/code-review.prompt.md \
-            review-context/code-review.prompt.md
+          Review ONLY the changes contained in review.diff.
 
-          cp changed-files.txt review-context/changed-files.txt
-          cp review.diff review-context/review.diff
+          Inspect relevant repository files, requirements,
+          acceptance criteria, tests, architecture documentation,
+          and static-analysis results when useful.
 
-      - name: Upload prepared review context
-        uses: actions/upload-artifact@v4
-        with:
-          name: code-review-context
-          path: review-context/
+          Validate the implementation against the requirements
+          and acceptance criteria whenever they are available.
+
+          Do not modify files.
+          Do not create commits.
+          Do not push code.
+          Do not implement fixes.
+          Do not rewrite developer code.
+
+          Return the complete review in the format defined by
+          the repository's code-review agent.
+          EOF
+
+      - name: Run custom review agent
+        env:
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+        run: |
+          npm install -g @github/copilot
+
+          copilot \
+            --agent=code-review \
+            --prompt "$(cat review-prompt.txt)" \
+            --silent \
+            --no-ask-user \
+            --deny-tool write \
+            > review.md
+
+          test -s review.md
+
+      - name: Post review comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment \
+            "${{ github.event.pull_request.number }}" \
+            --body-file review.md
