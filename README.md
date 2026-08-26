@@ -1,5 +1,3 @@
-Yes. Keep it very simple. Replace the entire `README.md` with this:
-
 # Intelligent Code Review Agent
 
 Automated repository code review with two modes:
