@@ -7,7 +7,6 @@ on:
 permissions:
   contents: read
   pull-requests: write
-  copilot-requests: write
 
 jobs:
   code-review:
@@ -20,61 +19,46 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Generate review diff
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      - name: Generate PR diff
         run: |
-          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > changed-files.txt
-          git diff --no-ext-diff --unified=80 "$BASE_SHA" "$HEAD_SHA" > review.diff
+          git diff \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.event.pull_request.head.sha }}" \
+            --no-ext-diff --unified=80 > review.diff
 
-          echo "Files being reviewed:"
-          cat changed-files.txt
+      - name: Prepare review prompt
+        run: |
+          cat > review-prompt.txt <<'EOF'
+          You are the repository's automated code review agent.
 
-          echo "Diff size:"
-          wc -c review.diff
+          Read and follow:
+          .github/agents/code-review.agent.md
+          .github/instructions/code-review.instructions.md
+          .github/prompts/code-review.prompt.md
 
-      - name: Run custom code review agent
+          Review ONLY the changes contained in review.diff.
+
+          Inspect relevant repository files, requirements, tests,
+          architecture documentation and static-analysis results when useful.
+
+          Do not modify files.
+          Do not create commits.
+          Do not push code.
+          Do not implement fixes.
+
+          Return the complete review in the format defined by the
+          repository's code-review agent.
+          EOF
+
+      - name: Run custom review agent
         env:
-          GITHUB_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           npm install -g @github/copilot
 
           copilot \
             --agent=code-review \
-            --prompt "$(cat <<'PROMPT'
-You are performing an automated repository code review for this Pull Request.
-
-Use these repository files:
-
-.github/agents/code-review.agent.md
-.github/instructions/code-review.instructions.md
-.github/prompts/code-review.prompt.md
-
-Review the changes in:
-review.diff
-
-Changed files:
-changed-files.txt
-
-Inspect relevant repository files, requirements,
-acceptance criteria, architecture/design documents,
-tests, and static-analysis findings when available.
-
-Review ONLY the developer changes represented by the PR diff.
-
-Important restrictions:
-- Review only.
-- Do not modify source code.
-- Do not create commits.
-- Do not push changes.
-- Do not implement fixes.
-- Do not rewrite developer code.
-
-Return the complete review using the format defined by
-the repository code-review agent.
-PROMPT
-)" \
+            --prompt "$(cat review-prompt.txt)" \
             --silent \
             --no-ask-user \
             --deny-tool write \
@@ -82,9 +66,10 @@ PROMPT
 
           test -s review.md
 
-      - name: Post review to Pull Request
+      - name: Post review comment
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh pr comment "${{ github.event.pull_request.number }}" \
+          gh pr comment \
+            "${{ github.event.pull_request.number }}" \
             --body-file review.md
