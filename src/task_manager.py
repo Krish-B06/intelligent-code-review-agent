@@ -42,4 +42,4 @@ class TaskManager:
         del self.tasks[task_id]
 
     def update_task_title(self, task_id, user, title):
-        self.tasks[task_id]["title"] = title
+        self.tasks[task_id]["title"] = ""
