@@ -1,38 +1,70 @@
 # Code Review Task
 
-Review the supplied developer changes using:
+Perform a comprehensive code review using:
 
-- The custom code review agent instructions.
-- The repository code review instructions.
-- Supplied requirements and acceptance criteria.
-- Relevant architecture/design documentation.
-- Relevant tests.
-- Supplied static-analysis results.
-
-## Review Context
-
-The review input may contain:
-
-- Changed files.
-- Git diff.
-- Relevant surrounding source code.
-- Requirements or user story.
+- The custom code review agent.
+- Repository code review instructions.
+- Requirements and user stories.
 - Acceptance criteria.
-- Architecture/design documentation.
+- HLD / LLD / design documents.
+- Relevant source code.
 - Relevant tests.
-- Static-analysis results.
+- Coding standards.
+- Security guidelines when available.
+- Static-analysis findings when supplied.
 
-Review only the supplied change and the context necessary to understand it.
+## Review Scope
+
+Review ONLY the supplied developer changes.
+
+Use actual repository files as additional context when necessary to understand or validate the changed code.
 
 Do not assume unavailable information.
 
+## Review Areas
+
+Review for:
+
+1. Functional correctness
+2. Requirements and acceptance criteria
+3. Architecture and design compliance
+4. Coding standards and best practices
+5. Security
+6. Performance and scalability
+7. Reliability and maintainability
+8. Testability and coverage
+9. Static-analysis findings
+
+## Finding Rules
+
+Report only evidence-based, actionable findings.
+
+Do not report speculative issues.
+
+Do not report purely subjective style preferences as defects.
+
+## Mandatory Restrictions
+
+This is a read-only review.
+
+Do NOT:
+
+- Modify files
+- Fix code
+- Create commits
+- Push changes
+- Implement recommendations
+- Rewrite developer code
+
+Report observations and recommendations only.
+
 ## Required Response
 
-### Executive Summary
+Return EXACTLY this structure:
 
-Provide a concise assessment of the change.
+## Executive Summary
 
-### Compliance Scorecard
+## Compliance Scorecard
 
 | Area | Status | Comments |
 |---|---|---|
@@ -44,41 +76,17 @@ Provide a concise assessment of the change.
 | Reliability | Pass / Partial / Fail | |
 | Test Coverage | Pass / Partial / Fail | |
 
-### Findings
+## Critical Findings
 
-Group findings into:
+## Major Findings
 
-#### Critical
+## Minor Findings
 
-List only high-confidence critical findings.
+## Static Analysis Findings Review
 
-#### Major
+## Recommendations
 
-List significant findings that should normally be addressed before approval.
-
-#### Minor
-
-List legitimate lower-impact findings.
-
-For each finding, provide:
-
-- Severity
-- File and line
-- Observation
-- Why it matters
-- Recommended action
-
-If a severity category has no findings, state:
-
-`None identified.`
-
-### Recommendations
-
-Provide additional recommendations that are useful but do not represent findings.
-
-Do not implement any recommendation.
-
-### Overall Recommendation
+## Overall Recommendation
 
 Choose exactly one:
 
@@ -86,14 +94,19 @@ Choose exactly one:
 - Approve with Changes
 - Rework Required
 
-## Final Restrictions
+## Validation Checklist
 
-This is a read-only review.
+- ✓ Requirement coverage assessed
+- ✓ Acceptance criteria validated
+- ✓ Architecture compliance verified
+- ✓ Coding standards and best practices reviewed
+- ✓ Security reviewed
+- ✓ Performance evaluated
+- ✓ Reliability assessed
+- ✓ Testability and coverage reviewed
+- ✓ Static analysis findings reviewed
+- ✓ Actionable recommendations provided
 
-Do not modify files.
+Do not add additional sections.
 
-Do not create commits.
-
-Do not push changes.
-
-Do not implement fixes.
+Do not implement any recommendation.
