@@ -7,6 +7,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  copilot-requests: write
 
 jobs:
   code-review:
@@ -19,23 +20,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Collect changed files
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > changed-files.txt
-
-          echo "Files being reviewed:"
-          cat changed-files.txt
-
       - name: Generate review diff
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          git diff --no-ext-diff --unified=80 \
-            "$BASE_SHA" "$HEAD_SHA" > review.diff
+          git diff --name-only "$BASE_SHA" "$HEAD_SHA" > changed-files.txt
+          git diff --no-ext-diff --unified=80 "$BASE_SHA" "$HEAD_SHA" > review.diff
+
+          echo "Files being reviewed:"
+          cat changed-files.txt
 
           echo "Diff size:"
           wc -c review.diff
@@ -46,55 +40,41 @@ jobs:
         run: |
           npm install -g @github/copilot
 
-          cat > review-prompt.txt <<'PROMPT'
+          copilot \
+            --agent=code-review \
+            --prompt "$(cat <<'PROMPT'
 You are performing an automated repository code review for this Pull Request.
 
-Use the repository custom review agent:
+Use these repository files:
+
 .github/agents/code-review.agent.md
-
-Follow:
 .github/instructions/code-review.instructions.md
-
-Use:
 .github/prompts/code-review.prompt.md
 
-The developer changes are represented by:
+Review the changes in:
 review.diff
 
 Changed files:
 changed-files.txt
 
+Inspect relevant repository files, requirements,
+acceptance criteria, architecture/design documents,
+tests, and static-analysis findings when available.
+
 Review ONLY the developer changes represented by the PR diff.
 
-When additional context is required, inspect the actual project files
-in the repository related to those changes.
-
-Also inspect relevant:
-- requirements
-- acceptance criteria
-- architecture/design documents
-- tests
-- static-analysis findings
-
-when they exist.
-
 Important restrictions:
-
 - Review only.
 - Do not modify source code.
 - Do not create commits.
 - Do not push changes.
 - Do not implement fixes.
 - Do not rewrite developer code.
-- Report findings and observations only.
 
-Return the complete review using the exact output format required
-by the custom review agent.
+Return the complete review using the format defined by
+the repository code-review agent.
 PROMPT
-
-          copilot \
-            --agent=code-review \
-            --prompt "$(cat review-prompt.txt)" \
+)" \
             --silent \
             --no-ask-user \
             --deny-tool write \
@@ -105,7 +85,6 @@ PROMPT
       - name: Post review to Pull Request
         env:
           GH_TOKEN: ${{ github.token }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          gh pr comment "$PR_NUMBER" \
+          gh pr comment "${{ github.event.pull_request.number }}" \
             --body-file review.md
