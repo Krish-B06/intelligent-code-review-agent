@@ -20,11 +20,12 @@ jobs:
           fetch-depth: 0
 
       - name: Generate PR diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          git diff \
-            "${{ github.event.pull_request.base.sha }}" \
-            "${{ github.event.pull_request.head.sha }}" \
-            --no-ext-diff --unified=80 > review.diff
+          git diff --no-ext-diff --unified=80 \
+            "$BASE_SHA" "$HEAD_SHA" > review.diff
 
       - name: Prepare review prompt
         run: |
@@ -32,27 +33,33 @@ jobs:
           You are the repository's automated code review agent.
 
           Read and follow:
+
           .github/agents/code-review.agent.md
           .github/instructions/code-review.instructions.md
           .github/prompts/code-review.prompt.md
 
           Review ONLY the changes contained in review.diff.
 
-          Inspect relevant repository files, requirements, tests,
-          architecture documentation and static-analysis results when useful.
+          Inspect relevant repository files, requirements,
+          acceptance criteria, tests, architecture documentation,
+          and static-analysis results when useful.
+
+          Validate the implementation against the requirements
+          and acceptance criteria whenever they are available.
 
           Do not modify files.
           Do not create commits.
           Do not push code.
           Do not implement fixes.
+          Do not rewrite developer code.
 
-          Return the complete review in the format defined by the
-          repository's code-review agent.
+          Return the complete review in the format defined by
+          the repository's code-review agent.
           EOF
 
       - name: Run custom review agent
         env:
-          GH_TOKEN: ${{ github.token }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
         run: |
           npm install -g @github/copilot
 
