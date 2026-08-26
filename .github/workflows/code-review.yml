@@ -6,11 +6,12 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: write
+  copilot-requests: write
 
 jobs:
-  prepare-review:
-    name: Prepare Code Review
+  code-review:
+    name: Custom Code Review
     runs-on: ubuntu-latest
 
     steps:
@@ -20,14 +21,13 @@ jobs:
           fetch-depth: 0
 
       - name: Collect changed files
-        id: changes
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           git diff --name-only "$BASE_SHA" "$HEAD_SHA" > changed-files.txt
 
-          echo "Changed files:"
+          echo "Files being reviewed:"
           cat changed-files.txt
 
       - name: Generate review diff
@@ -41,24 +41,72 @@ jobs:
           echo "Diff size:"
           wc -c review.diff
 
-      - name: Collect repository review context
+      - name: Run custom code review agent
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p review-context
+          npm install -g @github/copilot
 
-          cp .github/agents/code-review.agent.md \
-            review-context/code-review.agent.md
+          cat > review-prompt.txt <<'PROMPT'
+You are performing an automated repository code review for this Pull Request.
 
-          cp .github/instructions/code-review.instructions.md \
-            review-context/code-review.instructions.md
+Use the repository custom review agent:
+.github/agents/code-review.agent.md
 
-          cp .github/prompts/code-review.prompt.md \
-            review-context/code-review.prompt.md
+Follow:
+.github/instructions/code-review.instructions.md
 
-          cp changed-files.txt review-context/changed-files.txt
-          cp review.diff review-context/review.diff
+Use:
+.github/prompts/code-review.prompt.md
 
-      - name: Upload prepared review context
-        uses: actions/upload-artifact@v4
-        with:
-          name: code-review-context
-          path: review-context/
+The developer changes are represented by:
+review.diff
+
+Changed files:
+changed-files.txt
+
+Review ONLY the developer changes represented by the PR diff.
+
+When additional context is required, inspect the actual project files
+in the repository related to those changes.
+
+Also inspect relevant:
+- requirements
+- acceptance criteria
+- architecture/design documents
+- tests
+- static-analysis findings
+
+when they exist.
+
+Important restrictions:
+
+- Review only.
+- Do not modify source code.
+- Do not create commits.
+- Do not push changes.
+- Do not implement fixes.
+- Do not rewrite developer code.
+- Report findings and observations only.
+
+Return the complete review using the exact output format required
+by the custom review agent.
+PROMPT
+
+          copilot \
+            --agent=code-review \
+            --prompt "$(cat review-prompt.txt)" \
+            --silent \
+            --no-ask-user \
+            --deny-tool write \
+            > review.md
+
+          test -s review.md
+
+      - name: Post review to Pull Request
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          gh pr comment "$PR_NUMBER" \
+            --body-file review.md
