@@ -26,7 +26,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Resolve the PR number for both trigger types.
+      # ------------------------------------------------------------
+      # Resolve PR
+      # ------------------------------------------------------------
+
       - name: Resolve pull request
         id: pr
         env:
@@ -34,6 +37,8 @@ jobs:
           INPUT_PR_NUMBER: ${{ inputs.pr_number }}
           EVENT_PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
+          set -e
+
           if [ -n "$EVENT_PR_NUMBER" ]; then
             PR_NUMBER="$EVENT_PR_NUMBER"
           elif [ -n "$INPUT_PR_NUMBER" ]; then
@@ -44,16 +49,20 @@ jobs:
           fi
 
           echo "PR number: $PR_NUMBER"
-
           echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
 
-      # Resolve the exact base/head commits.
+      # ------------------------------------------------------------
+      # Resolve exact PR commits
+      # ------------------------------------------------------------
+
       - name: Resolve pull request commits
         id: commits
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ steps.pr.outputs.pr_number }}
         run: |
+          set -e
+
           BASE_SHA=$(gh pr view "$PR_NUMBER" \
             --json baseRefOid \
             --jq '.baseRefOid')
@@ -73,11 +82,17 @@ jobs:
           echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
 
+      # ------------------------------------------------------------
+      # Changed files
+      # ------------------------------------------------------------
+
       - name: Collect changed files
         env:
           BASE_SHA: ${{ steps.commits.outputs.base_sha }}
           HEAD_SHA: ${{ steps.commits.outputs.head_sha }}
         run: |
+          set -e
+
           git diff --name-only \
             "$BASE_SHA" "$HEAD_SHA" \
             > changed-files.txt
@@ -85,11 +100,17 @@ jobs:
           echo "Changed files:"
           cat changed-files.txt
 
+      # ------------------------------------------------------------
+      # Review diff
+      # ------------------------------------------------------------
+
       - name: Generate review diff
         env:
           BASE_SHA: ${{ steps.commits.outputs.base_sha }}
           HEAD_SHA: ${{ steps.commits.outputs.head_sha }}
         run: |
+          set -e
+
           git diff \
             --no-ext-diff \
             --unified=80 \
@@ -99,8 +120,14 @@ jobs:
           echo "Diff size:"
           wc -c review.diff
 
+      # ------------------------------------------------------------
+      # Repository context discovery
+      # ------------------------------------------------------------
+
       - name: Discover review context
         run: |
+          set -e
+
           {
             echo "=== CHANGED FILES ==="
             cat changed-files.txt
@@ -178,6 +205,10 @@ jobs:
 
           cat review-manifest.txt
 
+      # ------------------------------------------------------------
+      # Validate repository review definitions and inputs
+      # ------------------------------------------------------------
+
       - name: Validate review inputs
         run: |
           set -e
@@ -206,8 +237,14 @@ jobs:
           echo
           echo "Review input validation passed."
 
+      # ------------------------------------------------------------
+      # Prepare review context
+      # ------------------------------------------------------------
+
       - name: Collect repository review definitions
         run: |
+          set -e
+
           mkdir -p review-context
 
           cp .github/agents/code-review.agent.md \
@@ -228,8 +265,14 @@ jobs:
           cp review-manifest.txt \
             review-context/review-manifest.txt
 
+      # ------------------------------------------------------------
+      # Human-readable review metadata
+      # ------------------------------------------------------------
+
       - name: Build review input summary
         run: |
+          set -e
+
           {
             echo "CUSTOM CODE REVIEW INPUT"
             echo
@@ -252,6 +295,102 @@ jobs:
             echo "Review manifest:"
             cat review-manifest.txt
           } > review-context/review-input-summary.txt
+
+      # ------------------------------------------------------------
+      # Build the prompt for the eventual AI execution step
+      # ------------------------------------------------------------
+
+      - name: Build review execution prompt
+        run: |
+          set -e
+
+          cat > review-context/review-execution-prompt.txt <<'EOF'
+          You are performing a repository code review.
+
+          Use the repository custom review agent:
+
+          .github/agents/code-review.agent.md
+
+          Follow the repository review instructions:
+
+          .github/instructions/code-review.instructions.md
+
+          Follow the repository review prompt:
+
+          .github/prompts/code-review.prompt.md
+
+          Review ONLY the developer changes represented by:
+
+          review.diff
+
+          Use these supporting inputs when relevant:
+
+          changed-files.txt
+          review-manifest.txt
+          review-input-summary.txt
+
+          Review the changes for:
+
+          - Functional correctness
+          - Requirements and acceptance criteria
+          - Architecture and design
+          - Coding standards and maintainability
+          - Security
+          - Performance and scalability
+          - Reliability and error handling
+          - Testability and test coverage
+          - Relevant static-analysis findings
+
+          Follow the required output format defined by the custom review agent.
+
+          Important restrictions:
+
+          - Do NOT modify source code.
+          - Do NOT create correction commits.
+          - Do NOT push changes.
+          - Do NOT implement recommendations.
+          - Do NOT rewrite or fix developer code.
+          - Return observations and recommendations only.
+
+          Return the complete code review as text.
+          EOF
+
+          echo "Review execution prompt prepared."
+
+          wc -c review-context/review-execution-prompt.txt
+
+      # ------------------------------------------------------------
+      # Show final prepared context
+      # ------------------------------------------------------------
+
+      - name: Validate prepared review context
+        run: |
+          set -e
+
+          test -s review-context/code-review.agent.md
+          test -s review-context/code-review.instructions.md
+          test -s review-context/code-review.prompt.md
+          test -s review-context/changed-files.txt
+          test -s review-context/review.diff
+          test -s review-context/review-manifest.txt
+          test -s review-context/review-input-summary.txt
+          test -s review-context/review-execution-prompt.txt
+
+          echo "Prepared review context:"
+          find review-context \
+            -maxdepth 1 \
+            -type f \
+            -printf '%f\n' \
+            | sort
+
+          echo
+          echo "Prepared review context validation passed."
+
+      # ------------------------------------------------------------
+      # Artifact
+      #
+      # AI execution is intentionally NOT here yet.
+      # ------------------------------------------------------------
 
       - name: Upload prepared review context
         uses: actions/upload-artifact@v4

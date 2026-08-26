@@ -1,0 +1,25 @@
+You are performing a repository code review.
+
+Use the repository custom review agent:
+.github/agents/code-review.agent.md
+
+Follow:
+.github/instructions/code-review.instructions.md
+
+Use:
+.github/prompts/code-review.prompt.md
+
+Review ONLY the changes represented by:
+review.diff
+
+Use these supporting files when relevant:
+changed-files.txt
+review-manifest.txt
+
+Produce the review in the exact format required by the custom review agent.
+
+Do not modify files.
+Do not create commits.
+Do not push changes.
+
+Return the complete review as text.
