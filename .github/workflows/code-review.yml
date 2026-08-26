@@ -390,8 +390,14 @@ jobs:
           echo
           echo "Prepared review context validation passed."
 
-            # ------------------------------------------------------------
+      # ------------------------------------------------------------
       # Execute custom AI code review
+      #
+      # No --model is specified intentionally.
+      # ------------------------------------------------------------
+
+            # ------------------------------------------------------------
+      # Execute repository custom review agent
       # ------------------------------------------------------------
 
       - name: Run custom code review agent
@@ -404,24 +410,26 @@ jobs:
 
           npm install -g @github/copilot
 
+          echo "Starting repository custom code review..."
+
           copilot \
-            --agent=code-review \
-            --model=gpt-4.1 \
-            -p "$(cat review-context/review-execution-prompt.txt)" \
+            --agent code-review \
+            --prompt "$(cat review-context/review-execution-prompt.txt)" \
             --output-format text \
             --silent \
-            --deny-tool=write \
+            --deny-tool write \
             > review-output/review.md
 
-          test -s review-output/review.md
+          if [ ! -s review-output/review.md ]; then
+            echo "ERROR: Copilot produced no review output."
+            exit 1
+          fi
 
           echo "Code review generated successfully."
-          echo
-          echo "Review size:"
           wc -c review-output/review.md
 
-      # ------------------------------------------------------------
-      # Validate AI output
+            # ------------------------------------------------------------
+      # Validate AI review output
       # ------------------------------------------------------------
 
       - name: Validate AI review output
@@ -430,10 +438,19 @@ jobs:
 
           test -s review-output/review.md
 
-          echo "AI review output validation passed."
+          echo "Review output:"
+          echo "----------------------------------------"
+          cat review-output/review.md
+          echo "----------------------------------------"
+
+          grep -q "Executive Summary" review-output/review.md
+          grep -q "Compliance Scorecard" review-output/review.md
+          grep -q "Findings" review-output/review.md
+          grep -q "Recommendations" review-output/review.md
+          grep -q "Overall Recommendation" review-output/review.md
+
           echo
-          echo "Review preview:"
-          sed -n '1,80p' review-output/review.md
+          echo "Review format validation passed."
 
       # ------------------------------------------------------------
       # Upload prepared context + AI result
