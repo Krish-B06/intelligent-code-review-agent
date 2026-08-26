@@ -14,6 +14,7 @@ on:
 permissions:
   contents: read
   pull-requests: read
+  copilot-requests: write
 
 jobs:
   prepare-review:
@@ -21,6 +22,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # ------------------------------------------------------------
+      # Checkout
+      # ------------------------------------------------------------
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -206,7 +211,7 @@ jobs:
           cat review-manifest.txt
 
       # ------------------------------------------------------------
-      # Validate repository review definitions and inputs
+      # Validate review definitions and inputs
       # ------------------------------------------------------------
 
       - name: Validate review inputs
@@ -297,7 +302,7 @@ jobs:
           } > review-context/review-input-summary.txt
 
       # ------------------------------------------------------------
-      # Build the prompt for the eventual AI execution step
+      # Build AI execution prompt
       # ------------------------------------------------------------
 
       - name: Build review execution prompt
@@ -356,11 +361,10 @@ jobs:
           EOF
 
           echo "Review execution prompt prepared."
-
           wc -c review-context/review-execution-prompt.txt
 
       # ------------------------------------------------------------
-      # Show final prepared context
+      # Validate prepared review context
       # ------------------------------------------------------------
 
       - name: Validate prepared review context
@@ -386,14 +390,59 @@ jobs:
           echo
           echo "Prepared review context validation passed."
 
-      # ------------------------------------------------------------
-      # Artifact
-      #
-      # AI execution is intentionally NOT here yet.
+            # ------------------------------------------------------------
+      # Execute custom AI code review
       # ------------------------------------------------------------
 
-      - name: Upload prepared review context
+      - name: Run custom code review agent
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+
+          mkdir -p review-output
+
+          npm install -g @github/copilot
+
+          copilot \
+            --agent=code-review \
+            --model=gpt-5-mini \
+            -p "$(cat review-context/review-execution-prompt.txt)" \
+            --output-format text \
+            --silent \
+            --deny-tool=write \
+            > review-output/review.md
+
+          test -s review-output/review.md
+
+          echo "Code review generated successfully."
+          echo
+          echo "Review size:"
+          wc -c review-output/review.md
+
+      # ------------------------------------------------------------
+      # Validate AI output
+      # ------------------------------------------------------------
+
+      - name: Validate AI review output
+        run: |
+          set -e
+
+          test -s review-output/review.md
+
+          echo "AI review output validation passed."
+          echo
+          echo "Review preview:"
+          sed -n '1,80p' review-output/review.md
+
+      # ------------------------------------------------------------
+      # Upload prepared context + AI result
+      # ------------------------------------------------------------
+
+      - name: Upload code review artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: code-review-context
-          path: review-context/
+          name: code-review-result
+          path: |
+            review-context/
+            review-output/
