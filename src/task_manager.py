@@ -21,11 +21,17 @@ class TaskManager:
         self.next_id += 1
         return task
 
-    def complete_task(self, task_id, user):
-        task = self.tasks[task_id]
+    # def complete_task(self, task_id, user):
+    #     task = self.tasks[task_id]
 
-        if not can_modify_task(user, task["owner"]):
-            raise PermissionError("User cannot modify this task")
+    #     if not can_modify_task(user, task["owner"]):
+    #         raise PermissionError("User cannot modify this task")
+
+    #     task["completed"] = True
+    #     return task
+
+    def complete_task(self, task_id, user):
+        task = self._get_task(task_id)
 
         task["completed"] = True
         return task
@@ -42,10 +48,7 @@ class TaskManager:
         del self.tasks[task_id]
 
     def update_task_title(self, task_id, user, title):
-        task = self.tasks[task_id]
-
-        if not can_modify_task(user, task["owner"]):
-            raise PermissionError("User cannot modify this task")
+        task = self._get_task(task_id)
 
         if not title.strip():
             raise ValueError("Task title cannot be empty")
