@@ -1,109 +1,140 @@
+#!/usr/bin/env python3
+
 import os
 import re
 import sys
-import urllib.parse
+import ipaddress
+import socket
 import urllib.request
-import base64
+import urllib.error
+from urllib.parse import urlparse
+
+
+OUTPUT = "requirements-context.md"
+
+# Replace these with the actual domains used by your organization.
+ALLOWED_HOSTS = {
+    "dev.azure.com"
+}
+
+REQUIREMENT_PATTERN = re.compile(
+    r"https?://[^\s<>\"]+",
+    re.IGNORECASE,
+)
 
 
 def extract_requirement_link(text):
-    patterns = [
-        r'https?://[^\s<>"\']+',
-    ]
-
-    for pattern in patterns:
-        match = re.search(pattern, text or "")
-        if match:
-            return match.group(0).rstrip(".,)")
-    
-    return None
-
-
-def fetch_url(url):
-    token = os.getenv("REQUIREMENTS_TOKEN")
-
-    request = urllib.request.Request(url)
-
-    if token:
-        request.add_header("Authorization", f"Bearer {token}")
-
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return response.read().decode("utf-8", errors="replace")
-
-
-def fetch_ado_work_item(url):
-    match = re.search(r"/_workitems/edit/(\d+)", url)
-
+    match = REQUIREMENT_PATTERN.search(text or "")
     if not match:
         return None
 
-    work_item_id = match.group(1)
+    return match.group(0).rstrip(".,)")
 
-    parsed = urllib.parse.urlparse(url)
-    parts = parsed.path.strip("/").split("/")
 
-    if len(parts) < 3:
-        return None
+def validate_url(url):
+    parsed = urlparse(url)
 
-    organization = parts[0]
-    project = parts[1]
+    if parsed.scheme != "https":
+        raise ValueError("Only HTTPS requirement URLs are allowed.")
 
-    api_url = (
-        f"https://dev.azure.com/{organization}/{project}"
-        f"/_apis/wit/workitems/{work_item_id}?api-version=7.1"
-    )
+    hostname = parsed.hostname
+    if not hostname:
+        raise ValueError("Requirement URL has no hostname.")
 
-    pat = os.getenv("AZURE_DEVOPS_PAT")
-
-    if not pat:
-        raise RuntimeError(
-            "AZURE_DEVOPS_PAT is required to read Azure DevOps work items."
+    if hostname.lower() not in ALLOWED_HOSTS:
+        raise ValueError(
+            f"Requirement host is not allowed: {hostname}"
         )
 
-    credentials = base64.b64encode(f":{pat}".encode()).decode()
+    try:
+        addresses = socket.getaddrinfo(
+            hostname,
+            443,
+            type=socket.SOCK_STREAM,
+        )
+    except socket.gaierror as exc:
+        raise ValueError("Unable to resolve requirement host.") from exc
 
-    request = urllib.request.Request(api_url)
-    request.add_header("Authorization", f"Basic {credentials}")
+    for address in addresses:
+        ip = ipaddress.ip_address(address[4][0])
 
-    with urllib.request.urlopen(request, timeout=30) as response:
-        return response.read().decode("utf-8", errors="replace")
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+        ):
+            raise ValueError(
+                "Requirement URL resolves to a private/internal address."
+            )
+
+
+def fetch_url(url, token=None):
+    validate_url(url)
+
+    request = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "repository-code-review-agent",
+        },
+    )
+
+    if token:
+        request.add_header(
+            "Authorization",
+            f"Bearer {token}",
+        )
+
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            return response.read().decode("utf-8", errors="replace")
+
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        raise RuntimeError(
+            f"Unable to fetch requirement: {exc}"
+        ) from exc
 
 
 def main():
-    if len(sys.argv) != 2:
-        print("Usage: fetch-requirements.py <PR_BODY_FILE>")
-        sys.exit(1)
+    pr_body = os.environ.get("PR_BODY", "")
+    token = os.environ.get("REQUIREMENTS_TOKEN", "")
 
-    pr_body_file = sys.argv[1]
+    link = extract_requirement_link(pr_body)
 
-    with open(pr_body_file, "r", encoding="utf-8") as f:
-        pr_body = f.read()
-
-    url = extract_requirement_link(pr_body)
-
-    if not url:
-        print("No external requirement link provided.")
-        with open("requirements-context.md", "w", encoding="utf-8") as f:
-            f.write(
+    if not link:
+        with open(OUTPUT, "w", encoding="utf-8") as file:
+            file.write(
                 "# External Requirements\n\n"
                 "No external requirement link was provided.\n"
             )
+
+        print("No external requirement link provided.")
         return
 
-    print(f"Requirement link found: {url}")
+    print(f"Requirement link detected: {link}")
 
-    if "/_workitems/edit/" in url:
-        content = fetch_ado_work_item(url)
-    else:
-        content = fetch_url(url)
+    try:
+        content = fetch_url(link, token)
 
-    with open("requirements-context.md", "w", encoding="utf-8") as f:
-        f.write("# External Requirements\n\n")
-        f.write(f"Source: {url}\n\n")
-        f.write("## Retrieved Content\n\n")
-        f.write(content)
+        with open(OUTPUT, "w", encoding="utf-8") as file:
+            file.write("# External Requirements\n\n")
+            file.write(f"Source: {link}\n\n")
+            file.write(content)
 
-    print("Requirement context generated successfully.")
+        print("External requirement fetched successfully.")
+
+    except Exception as exc:
+        with open(OUTPUT, "w", encoding="utf-8") as file:
+            file.write("# External Requirements\n\n")
+            file.write(f"Source: {link}\n\n")
+            file.write(
+                "The external requirement could not be retrieved.\n"
+            )
+            file.write(f"Reason: {exc}\n")
+
+        print(f"Requirement fetch failed: {exc}")
+        sys.exit(0)
 
 
 if __name__ == "__main__":
