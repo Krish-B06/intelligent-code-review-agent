@@ -21,13 +21,25 @@ class TaskManager:
         self.next_id += 1
         return task
 
-    def complete_task(self, task_id, user):
-        task = self.tasks[task_id]
+    # def complete_task(self, task_id, user):
+    #     task = self.tasks[task_id]
 
-        if not can_modify_task(user, task["owner"]):
-            raise PermissionError("User cannot modify this task")
+    #     if not can_modify_task(user, task["owner"]):
+    #         raise PermissionError("User cannot modify this task")
 
-        task["completed"] = True
+    #     task["completed"] = True
+    #     return task
+
+    def create_task(self, title, owner):
+        task = {
+            "id": self.next_id,
+            "title": title,
+            "owner": owner,
+            "completed": False,
+        }
+
+        self.tasks[self.next_id] = task
+        self.next_id += 1
         return task
 
     def delete_task(self, task_id, user):
