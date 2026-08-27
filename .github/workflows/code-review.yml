@@ -27,9 +27,25 @@ jobs:
           git diff --no-ext-diff --unified=80 \
             "$BASE_SHA" "$HEAD_SHA" > review.diff
 
+      - name: Extract PBI and requirement link
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          echo "$PR_BODY" > pr-body.txt
+
+          PBI=$(echo "$PR_BODY" | grep -oiE 'PBI:[[:space:]]*[0-9]+' | head -1 | sed -E 's/.*:[[:space:]]*//')
+
+          LINK=$(echo "$PR_BODY" | grep -oE 'https?://[^[:space:]>)]+' | head -1)
+
+          echo "PBI=$PBI" >> "$GITHUB_ENV"
+          echo "REQUIREMENT_LINK=$LINK" >> "$GITHUB_ENV"
+
+          echo "PBI: ${PBI:-Not provided}"
+          echo "Requirement link: ${LINK:-Not provided}"
+
       - name: Prepare review prompt
         run: |
-          cat > review-prompt.txt <<'EOF'
+          cat > review-prompt.txt <<EOF
           You are the repository's automated code review agent.
 
           Read and follow:
@@ -44,8 +60,26 @@ jobs:
           acceptance criteria, tests, architecture documentation,
           and static-analysis results when useful.
 
-          Validate the implementation against the requirements
-          and acceptance criteria whenever they are available.
+          Pull Request description:
+          --------------------------
+          $(cat pr-body.txt)
+          --------------------------
+
+          PBI information:
+          ${PBI:-No PBI provided}
+
+          Requirements / acceptance-criteria link:
+          ${REQUIREMENT_LINK:-No external requirements link provided}
+
+          If a requirements or acceptance-criteria link is provided,
+          use it as additional context for validating the implementation.
+
+          If no link is provided, continue the review using the
+          requirements, documentation and acceptance criteria available
+          inside the repository.
+
+          Validate the implementation against the requirements and
+          acceptance criteria whenever they are available.
 
           Do not modify files.
           Do not create commits.

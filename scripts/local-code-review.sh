@@ -13,9 +13,16 @@ test -f "$INSTRUCTIONS"
 test -f "$PROMPT"
 
 BASE_REF="${1:-main}"
+REQUIREMENT_LINK="${2:-}"
 
 echo "Preparing local code review..."
 echo "Base: $BASE_REF"
+
+if [ -n "$REQUIREMENT_REFERENCE" ]; then
+    echo "Requirement reference: $REQUIREMENT_REFERENCE"
+else
+    echo "Requirement reference: Not provided"
+fi
 
 rm -rf review-output
 mkdir -p review-output
@@ -104,8 +111,33 @@ Changed files:
 The repository itself may be inspected for additional context
 when necessary to understand the changed project files.
 
+============================================================
+REQUIREMENTS / PBI VALIDATION
+============================================================
+
+Requirement / PBI / Docupedia / ADS reference:
+
+${REQUIREMENT_REFERENCE:-No external requirement reference provided}
+
+If a requirement reference or link is provided:
+
+- Use it as additional context for the review.
+- Identify the applicable requirements and acceptance criteria.
+- Validate the developer changes against them.
+- Report requirement mismatches as evidence-based findings.
+
+If no external requirement reference is provided:
+
+- Continue the review normally.
+- Inspect repository-local requirements and acceptance criteria.
+- Do not invent unavailable requirements.
+
+============================================================
+ADDITIONAL CONTEXT
+============================================================
+
 Relevant requirements, acceptance criteria, architecture/design
-documents, tests, and static-analysis results may also be inspected
+documents, tests, and static-analysis results may be inspected
 when they exist in the repository.
 
 Do NOT treat generated review artifacts as project source code.

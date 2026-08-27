@@ -6,14 +6,17 @@ These instructions define the review standards for this repository.
 
 Evaluate developer changes for correctness, quality, security, maintainability, and alignment with repository requirements.
 
-Review the changed code first. Use additional repository context only when it is relevant to understanding or validating the change.
+Review the changed code first. Use additional repository context only when relevant to understanding or validating the change.
 
-## 1. Functional Correctness
+## 1. Requirements and Functional Correctness
 
 Check:
 
 - Requirements and user stories.
 - Acceptance criteria.
+- PBI requirements when available.
+- Docupedia requirements when available.
+- ADS board requirements when available.
 - Expected behavior.
 - Incorrect or incomplete implementation.
 - Missing validation.
@@ -21,7 +24,19 @@ Check:
 - Edge cases.
 - Error and failure scenarios.
 
-Do not mark functionality as missing when the required context is not available.
+If a PBI, Docupedia, ADS, or other requirement link is provided with the change:
+
+- Use the linked requirement when it is accessible.
+- Compare the implementation against the requirement and acceptance criteria.
+- Report clear mismatches as findings.
+
+If no external requirement link is provided:
+
+- Check repository-local requirements when available.
+- Continue the normal code review.
+- Do not assume unavailable requirements.
+
+Do not mark functionality as missing when the required context is unavailable.
 
 ## 2. Architecture and Design
 
@@ -66,7 +81,7 @@ Check for:
 - Improper error information disclosure.
 - Common secure-coding violations relevant to the technology.
 
-Security findings should be evidence-based.
+Security findings must be evidence-based.
 
 ## 5. Performance and Scalability
 
@@ -95,7 +110,7 @@ Check for:
 - Difficult-to-maintain implementation.
 - Fragile assumptions.
 
-## 7. Testability
+## 7. Testability and Coverage
 
 Check:
 
@@ -133,7 +148,7 @@ Prefer fewer high-confidence findings over many speculative findings.
 
 ### Critical
 
-Use only for severe issues that can cause major security, data integrity, availability, or critical functional impact.
+Use only for severe issues that can cause major security, data-integrity, availability, or critical functional impact.
 
 ### Major
 
