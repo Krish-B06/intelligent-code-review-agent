@@ -5,12 +5,8 @@ ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
 AGENT=".github/agents/code-review.agent.md"
-INSTRUCTIONS=".github/instructions/code-review.instructions.md"
-PROMPT=".github/prompts/code-review.prompt.md"
 
 test -f "$AGENT"
-test -f "$INSTRUCTIONS"
-test -f "$PROMPT"
 
 BASE_REF="${1:-main}"
 
@@ -43,7 +39,10 @@ git diff --name-only \
 git diff \
   >> /tmp/review.diff
 
-# Include staged changes as well.
+# ------------------------------------------------------------
+# 3. Staged changes
+# ------------------------------------------------------------
+
 git diff --cached --name-only \
   >> /tmp/review-changed-files.txt
 
@@ -51,7 +50,7 @@ git diff --cached \
   >> /tmp/review.diff
 
 # ------------------------------------------------------------
-# Remove duplicates
+# 4. Remove duplicate file names
 # ------------------------------------------------------------
 
 sort -u /tmp/review-changed-files.txt \
@@ -74,20 +73,12 @@ wc -c /tmp/review.diff
 # Build review prompt
 # ------------------------------------------------------------
 
-cat > /tmp/review-prompt.txt <<EOF2
+cat > /tmp/review-prompt.txt <<EOF
 You are performing a LOCAL repository code review.
 
-Use the repository custom review agent:
+Follow the review instructions defined in:
 
 $AGENT
-
-Follow:
-
-$INSTRUCTIONS
-
-Use:
-
-$PROMPT
 
 ============================================================
 REVIEW SCOPE
@@ -101,37 +92,16 @@ Changed files:
 
 /tmp/review-changed-files.txt
 
-The repository itself may be inspected for additional context
-when necessary to understand the changed project files.
+Use relevant repository files as context when necessary.
 
-Relevant requirements, acceptance criteria, architecture/design
-documents, tests, and static-analysis results may also be inspected
-when they exist in the repository.
+Consider available requirements, acceptance criteria,
+architecture/design documents, tests, coding standards,
+security guidance, and static-analysis results.
 
-Do NOT treat generated review artifacts as project source code.
-
-============================================================
-REVIEW REQUIREMENTS
-============================================================
-
-Review for:
-
-1. Functional correctness
-2. Requirements and acceptance criteria
-3. Architecture and design compliance
-4. Coding standards and maintainability
-5. Security
-6. Performance and scalability
-7. Reliability and error handling
-8. Testability and coverage
-9. Static-analysis findings
-
-Report only evidence-based findings.
-
-Do not report speculative issues.
+Do not treat generated review artifacts as project source code.
 
 ============================================================
-MANDATORY RESTRICTIONS
+REVIEW RESTRICTIONS
 ============================================================
 
 This is a READ-ONLY review.
@@ -139,7 +109,7 @@ This is a READ-ONLY review.
 Do NOT:
 
 - modify source code
-- modify configuration
+- modify configuration to fix issues
 - create commits
 - push changes
 - implement fixes
@@ -153,10 +123,10 @@ OUTPUT
 ============================================================
 
 Return the complete review using the exact output format
-required by the custom review agent.
+defined by the custom review agent.
 
 Return the review as text.
-EOF2
+EOF
 
 # ------------------------------------------------------------
 # Execute repository custom review agent

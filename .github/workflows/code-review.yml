@@ -7,6 +7,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  copilot-requests: write
 
 jobs:
   code-review:
@@ -32,20 +33,20 @@ jobs:
           cat > review-prompt.txt <<'EOF'
           You are the repository's automated code review agent.
 
-          Read and follow:
+          Follow the review instructions defined in:
 
           .github/agents/code-review.agent.md
-          .github/instructions/code-review.instructions.md
-          .github/prompts/code-review.prompt.md
 
-          Review ONLY the changes contained in review.diff.
+          Review ONLY the developer changes contained in:
 
-          Inspect relevant repository files, requirements,
-          acceptance criteria, tests, architecture documentation,
-          and static-analysis results when useful.
+          review.diff
 
-          Validate the implementation against the requirements
-          and acceptance criteria whenever they are available.
+          Inspect relevant repository files when necessary to understand
+          or validate the changed code.
+
+          Consider available requirements, acceptance criteria,
+          architecture documentation, tests, coding standards,
+          security guidance, and static-analysis results.
 
           Do not modify files.
           Do not create commits.
@@ -53,13 +54,13 @@ jobs:
           Do not implement fixes.
           Do not rewrite developer code.
 
-          Return the complete review in the format defined by
-          the repository's code-review agent.
+          Return the complete review using the output format defined
+          by the custom review agent.
           EOF
 
       - name: Run custom review agent
         env:
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           npm install -g @github/copilot
 
